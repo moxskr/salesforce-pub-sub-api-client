@@ -1,7 +1,5 @@
 from dataclasses import dataclass
-import dotenv
 
-env_config = dotenv.dotenv_values('.env')
 
 @dataclass
 class AuthConfig:
