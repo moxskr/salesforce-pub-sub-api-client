@@ -18,18 +18,3 @@ class GrpcConfig:
     @property
     def full_enpoint(self) -> str:
         return f'{self.grpc_endpoint}:{self.grpc_port}'
-
-
-def get_sf_auth_config():
-    return AuthConfig(
-        client_id=env_config['SF_CLIENT_ID'],
-        client_secret=env_config['SF_CLIENT_SECRET'],
-        auth_endpoint=env_config['SF_AUTH_ENDPOINT']
-    )
-
-
-def get_sf_grpc_config():
-    return GrpcConfig(
-        grpc_endpoint=env_config['SF_PUBSUB_ENDPOINT'],
-        grpc_port=env_config['SF_PUBSUB_PORT']
-    )

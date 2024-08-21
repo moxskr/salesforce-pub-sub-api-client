@@ -12,6 +12,7 @@ python-dotenv = "*"
 httpx = "*"
 pytest = "*"
 bitstring = "*"
+dependency-injector = "==4.42.0b1"
 
 [dev-packages]
 

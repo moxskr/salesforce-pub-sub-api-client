@@ -16,9 +16,6 @@ from dtos import Event
 import pubsubapi.pubsub_api_pb2 as pb2
 import pubsubapi.pubsub_api_pb2_grpc as pb2_grpc
 
-logger = logging.getLogger(__name__)
-
-
 class AsyncSubscribtion:
     stub: pb2_grpc.PubSubStub
     handler: BasicHandler
@@ -31,6 +28,7 @@ class AsyncSubscribtion:
         self.event_type = event_type
         self.handler = handler
         self.auth_metadata = auth_metadata
+        self.logger = logging.getLogger(__name__)
 
     async def run(self) -> None:
         subscription_lock = asyncio.Lock()
@@ -63,7 +61,7 @@ class AsyncSubscribtion:
             if event.events:
                 replay_id = int.from_bytes(event.latest_replay_id)
 
-                logger.info(
+                self.logger.info(
                     f'Given an event of type {self.event_type} and replayId: {replay_id}'
                 )
 
@@ -123,9 +121,10 @@ class AsyncPubSubClient:
         self.auth_client = auth_client
         self.grpc_config = grpc_config
         self.event_handlers = {}
+        self.logger = logging.getLogger(__name__)
 
     def register_handler(self, event_type: str, event_handler: BasicHandler) -> None:
-        logger.info(
+        self.logger.info(
             f'{type(event_handler)} handler registered for event {event_type}'
         )
 
@@ -135,7 +134,7 @@ class AsyncPubSubClient:
         try:
             auth_metadata = await self.auth_client.get_auth_metadata()
         except Exception as e:
-            logger.error(f'An error occured during authorization. {e}')
+            self.logger.error(f'An error occured during authorization. {e}')
         else:
             with open(certifi.where(), 'rb') as f:
                 creds = grpc.ssl_channel_credentials(f.read())
@@ -152,6 +151,6 @@ class AsyncPubSubClient:
                     stub, event, handler, auth_metadata
                 )
 
-                logger.info(f'Subscription was created for event {event}')
+                self.logger.info(f'Subscription was created for event {event}')
 
                 tg.create_task(subscription.run())

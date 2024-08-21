@@ -3,8 +3,6 @@ import typing
 
 from dtos.notifications import Notification
 
-logger = logging.getLogger(__name__)
-
 
 class NotificationClient(typing.Protocol):
     def send_notification(self, notification: Notification) -> None:
@@ -12,6 +10,9 @@ class NotificationClient(typing.Protocol):
 
 
 class NotificationClientImpl:
+    def __init__(self) -> None:
+        self.logger = logging.getLogger(__name__)
+
     def send_notification(self, notification: Notification) -> None:
-        logger.info(f'Send message "{notification.message}" using {
-                    notification.message_type} channel')
+        self.logger.info(f'Send message "{notification.message}" using {
+            notification.message_type} channel')
