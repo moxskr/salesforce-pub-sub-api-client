@@ -5,12 +5,12 @@ from dependency_injector import containers, providers
 from clients import SfAuthClient, AsyncPubSubClient, NotificationClientImpl
 from configs import AuthConfig, GrpcConfig
 from handlers import CaseHandler
+from handlers.dispatcher import Dispatcher
+from handlers.print_handler import PrintHandler
 from services import CaseServiceImpl
 
 
 class Container(containers.DeclarativeContainer):
-    # configs
-
     config = providers.Configuration(ini_files=["config.ini"])
 
     logging = providers.Resource(
@@ -31,24 +31,9 @@ class Container(containers.DeclarativeContainer):
         grpc_port=config.sf_grpc.sf_grpc_port
     )
 
-    # clients
-
-    auth_client = providers.Singleton(
-        SfAuthClient,
-        auth_config=sf_auth_config
-    )
-
-    pub_sub_client = providers.Singleton(
-        AsyncPubSubClient,
-        auth_client=auth_client,
-        grpc_config=sf_grpc_config
-    )
-
     notification_client = providers.Singleton(
         NotificationClientImpl
     )
-
-    # handlers and services
 
     case_service = providers.Factory(
         CaseServiceImpl
@@ -58,4 +43,30 @@ class Container(containers.DeclarativeContainer):
         CaseHandler,
         case_service=case_service,
         notification_client=notification_client
+    )
+
+    print_handler = providers.Factory(
+        PrintHandler
+    )
+
+    dispatcher = providers.Singleton(
+        Dispatcher,
+        handlers=providers.Dict({
+            '/data/CaseChangeEvent': providers.List(
+                case_handler,
+                print_handler
+            )
+        })
+    )
+
+    auth_client = providers.Singleton(
+        SfAuthClient,
+        auth_config=sf_auth_config
+    )
+
+    pub_sub_client = providers.Singleton(
+        AsyncPubSubClient,
+        auth_client=auth_client,
+        grpc_config=sf_grpc_config,
+        dispatcher=dispatcher
     )

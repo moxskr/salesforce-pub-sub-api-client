@@ -8,7 +8,7 @@ import grpc  # type: ignore
 
 from clients import AuthClient
 from configs import GrpcConfig
-from handlers import BasicHandler
+from handlers.dispatcher import Dispatcher
 from utils import process_bitmap
 from utils import decode
 from dtos import Event
@@ -16,18 +16,19 @@ from dtos import Event
 import pubsubapi.pubsub_api_pb2 as pb2
 import pubsubapi.pubsub_api_pb2_grpc as pb2_grpc
 
+
 class AsyncSubscribtion:
     stub: pb2_grpc.PubSubStub
-    handler: BasicHandler
     auth_metadata: tuple[tuple[str, str], ...]
+    dispatcher: Dispatcher
     event_type: str
     schema: str = ''
 
-    def __init__(self, stub: pb2_grpc.PubSubStub, event_type: str, handler: BasicHandler, auth_metadata: tuple[tuple[str, str], ...]) -> None:
+    def __init__(self, stub: pb2_grpc.PubSubStub, event_type: str, auth_metadata: tuple[tuple[str, str], ...], dispatcher: Dispatcher) -> None:
         self.stub = stub
         self.event_type = event_type
-        self.handler = handler
         self.auth_metadata = auth_metadata
+        self.dispatcher = dispatcher
         self.logger = logging.getLogger(__name__)
 
     async def run(self) -> None:
@@ -62,15 +63,16 @@ class AsyncSubscribtion:
                 replay_id = int.from_bytes(event.latest_replay_id)
 
                 self.logger.info(
-                    f'Given an event of type {self.event_type} and replayId: {replay_id}'
+                    f'Given an event of type {
+                        self.event_type} and replayId: {replay_id}'
                 )
 
                 if not self.schema:
                     self.schema = await self.get_schema(event)
 
-                self.handler.process_event(
-                    self.decode_event(event)
-                )
+                event_dto = self.decode_event(event)
+
+                self.dispatcher.dispatch(self.event_type, event_dto)
 
     async def get_schema(self, event):
         schema_request = self.get_schema_request(event)
@@ -93,7 +95,7 @@ class AsyncSubscribtion:
 
     def build_event_dto(self, payload: dict):
         change_event_header = payload['ChangeEventHeader']
-        
+
         change_type = change_event_header['changeType']
 
         changed_fields = process_bitmap(
@@ -115,20 +117,13 @@ class AsyncSubscribtion:
 class AsyncPubSubClient:
     auth_client: AuthClient
     grpc_config: GrpcConfig
-    event_handlers: dict[str, BasicHandler]
+    dispatcher: Dispatcher
 
-    def __init__(self, auth_client: AuthClient, grpc_config: GrpcConfig) -> None:
+    def __init__(self, auth_client: AuthClient, grpc_config: GrpcConfig, dispatcher: Dispatcher) -> None:
         self.auth_client = auth_client
         self.grpc_config = grpc_config
-        self.event_handlers = {}
+        self.dispatcher = dispatcher
         self.logger = logging.getLogger(__name__)
-
-    def register_handler(self, event_type: str, event_handler: BasicHandler) -> None:
-        self.logger.info(
-            f'{type(event_handler)} handler registered for event {event_type}'
-        )
-
-        self.event_handlers[event_type] = event_handler
 
     async def run(self) -> None:
         try:
@@ -142,13 +137,13 @@ class AsyncPubSubClient:
             async with grpc.aio.secure_channel(self.grpc_config.full_enpoint, creds) as channel:
                 stub = pb2_grpc.PubSubStub(channel)
 
-                await self.run_subscriptions(stub, auth_metadata)
+                await self.run_subscriptions(stub, auth_metadata, self.dispatcher)
 
-    async def run_subscriptions(self, stub: pb2_grpc.PubSubStub, auth_metadata: tuple[tuple[str, str], ...]) -> None:
+    async def run_subscriptions(self, stub: pb2_grpc.PubSubStub, auth_metadata: tuple[tuple[str, str], ...], dispatcher: Dispatcher) -> None:
         async with asyncio.TaskGroup() as tg:
-            for event, handler in self.event_handlers.items():
+            for event in self.dispatcher.get_events_to_subscribe():
                 subscription = AsyncSubscribtion(
-                    stub, event, handler, auth_metadata
+                    stub, event, auth_metadata, dispatcher
                 )
 
                 self.logger.info(f'Subscription was created for event {event}')
